@@ -642,6 +642,7 @@ var
   Idx: Integer;
   DuracaoMs: Int64;
   QtdTotal: Integer;
+  PastaEdit, NomePasta, NomeSugerido: string;
 begin
   QtdTotal := lbPlaylist.Items.Count;
   if QtdTotal = 0 then
@@ -650,11 +651,24 @@ begin
     Exit;
   end;
 
+  // Sugere o nome da última pasta aberta no edtPasta (ex: "ANOS 90.rot")
+  PastaEdit := ExcludeTrailingPathDelimiter(Trim(edtPasta.Text));
+  NomePasta := ExtractFileName(PastaEdit);
+  if NomePasta <> '' then
+    NomeSugerido := NomePasta + '.rot'
+  else
+    NomeSugerido := 'playlist.rot';
+
   SaveDlg := TSaveDialog.Create(Self);
   try
     SaveDlg.Filter := 'Playlist ZaraRadio (*.rot)|*.rot|Playlist ZaraRadio (*.lst)|*.lst|Todos os arquivos (*.*)|*.*';
     SaveDlg.DefaultExt := 'rot';
-    SaveDlg.FileName := 'playlist.rot';
+    SaveDlg.FileName := NomeSugerido;
+
+    if DirectoryExists(ExtractFilePath(Application.ExeName) + 'rot') then
+      SaveDlg.InitialDir := ExtractFilePath(Application.ExeName) + 'rot'
+    else if DirectoryExists(PastaEdit) then
+      SaveDlg.InitialDir := PastaEdit;
 
     if not SaveDlg.Execute(Handle) then
       Exit;
