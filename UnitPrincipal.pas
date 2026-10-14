@@ -1,4 +1,4 @@
-unit UnitPrincipal;
+﻿unit UnitPrincipal;
 
 interface
 
@@ -7,7 +7,7 @@ uses
   System.SysUtils, System.Variants, System.Classes, System.IOUtils,
   System.Types, System.Generics.Collections, System.Generics.Defaults,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls,
-  Vcl.ComCtrls;
+  Vcl.ComCtrls, Vcl.ExtCtrls;
 
 // Declarações da Windows Media Foundation para obter a duração do áudio/vídeo
 const
@@ -80,6 +80,10 @@ type
     ProgressBar1: TProgressBar;
     MemoLog: TMemo;
 
+    // VU Meter Integrado
+    PanelVUMeter: TPanel;
+    TimerVUMeter: TTimer;
+
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure btnSelecionarPastaClick(Sender: TObject);
@@ -104,11 +108,20 @@ type
     procedure btnDescerLstClick(Sender: TObject);
     procedure btnRemoverItemLstClick(Sender: TObject);
     procedure btnSalvarLstClick(Sender: TObject);
+
+    // Evento do VU Meter
+    procedure TimerVUMeterTimer(Sender: TObject);
   private
     FPlayerTocando: Boolean;
     FPlayerPausado: Boolean;
     FPlayRequestId: Integer;
     FScanRequestId: Integer;
+    FVUMeterProcessInfo: TProcessInformation;
+    FVUMeterWnd: HWND;
+    FVUMeterCheckAttempts: Integer;
+    function ObterCaminhoVUMeter: string;
+    procedure IniciarVUMeter;
+    procedure FecharVUMeter;
     function ObterDuracaoMP3_MS(const CaminhoArquivo: string): Int64;
     procedure CarregarArquivosDiretorio(const Pasta: string);
     procedure AtualizarPreviewLst;
@@ -133,18 +146,150 @@ begin
   FPlayerPausado := False;
   FPlayRequestId := 0;
   FScanRequestId := 0;
+  FVUMeterWnd := 0;
+  FillChar(FVUMeterProcessInfo, SizeOf(FVUMeterProcessInfo), 0);
   try
     Icon.Handle := LoadIcon(HInstance, 'MAINICON');
   except
   end;
   AtualizarPreviewLst;
+  IniciarVUMeter;
 end;
 
 procedure TForm1.FormDestroy(Sender: TObject);
 begin
   PararAudio;
+  FecharVUMeter;
   MFShutdown;
   CoUninitialize;
+end;
+
+type
+  PEnumVUMeterInfo = ^TEnumVUMeterInfo;
+  TEnumVUMeterInfo = record
+    PID: DWORD;
+    Wnd: HWND;
+  end;
+
+function EnumVUMeterProc(hWnd: HWND; lParam: LPARAM): BOOL; stdcall;
+var
+  Info: PEnumVUMeterInfo;
+  ProcId: DWORD;
+begin
+  Info := PEnumVUMeterInfo(lParam);
+  GetWindowThreadProcessId(hWnd, @ProcId);
+  if (ProcId = Info^.PID) and IsWindow(hWnd) and IsWindowVisible(hWnd) then
+  begin
+    Info^.Wnd := hWnd;
+    Result := False;
+  end
+  else
+    Result := True;
+end;
+
+function TForm1.ObterCaminhoVUMeter: string;
+var
+  AppDir: string;
+  Caminho: string;
+begin
+  AppDir := ExtractFilePath(Application.ExeName);
+
+  // 1. Subpasta vu_meter junto ao executavel (Modo Producao / Instalador)
+  Caminho := TPath.Combine(AppDir, 'vu_meterVUMeter.exe');
+  if TFile.Exists(Caminho) then Exit(Caminho);
+
+  // 2. No mesmo diretorio do executavel
+  Caminho := TPath.Combine(AppDir, 'VUMeter.exe');
+  if TFile.Exists(Caminho) then Exit(Caminho);
+
+  // 3. Subindo dois niveis (executando dentro de Win32Debug ou Win32Release no Delphi IDE)
+  Caminho := TPath.GetFullPath(TPath.Combine(AppDir, '....u_meterVUMeter.exe'));
+  if TFile.Exists(Caminho) then Exit(Caminho);
+
+  // 4. Subindo um nivel
+  Caminho := TPath.GetFullPath(TPath.Combine(AppDir, '..u_meterVUMeter.exe'));
+  if TFile.Exists(Caminho) then Exit(Caminho);
+
+  Result := '';
+end;
+
+procedure TForm1.IniciarVUMeter;
+var
+  ExePath: string;
+  SI: TStartupInfo;
+begin
+  if (FVUMeterWnd <> 0) and IsWindow(FVUMeterWnd) then
+  begin
+    SetWindowPos(FVUMeterWnd, 0, 0, 0, PanelVUMeter.ClientWidth, PanelVUMeter.ClientHeight,
+      SWP_NOZORDER or SWP_SHOWWINDOW);
+    Exit;
+  end;
+
+  ExePath := ObterCaminhoVUMeter;
+  if ExePath = '' then
+  begin
+    PanelVUMeter.Caption := 'VU Meter nao encontrado na pasta vu_meter';
+    Exit;
+  end;
+
+  FillChar(SI, SizeOf(SI), 0);
+  SI.cb := SizeOf(SI);
+  FillChar(FVUMeterProcessInfo, SizeOf(FVUMeterProcessInfo), 0);
+
+  if CreateProcess(PChar(ExePath), nil, nil, nil, False, 0, nil, nil, SI, FVUMeterProcessInfo) then
+  begin
+    FVUMeterCheckAttempts := 0;
+    TimerVUMeter.Enabled := True;
+  end
+  else
+    PanelVUMeter.Caption := 'Erro ao iniciar VUMeter.exe';
+end;
+
+procedure TForm1.TimerVUMeterTimer(Sender: TObject);
+var
+  Info: TEnumVUMeterInfo;
+  OldStyle: NativeInt;
+begin
+  Inc(FVUMeterCheckAttempts);
+
+  Info.PID := FVUMeterProcessInfo.dwProcessId;
+  Info.Wnd := 0;
+  EnumWindows(@EnumVUMeterProc, LPARAM(@Info));
+
+  if Info.Wnd <> 0 then
+  begin
+    TimerVUMeter.Enabled := False;
+    FVUMeterWnd := Info.Wnd;
+
+    // Remove bordas e barra para embutir na interface do programa
+    OldStyle := GetWindowLong(FVUMeterWnd, GWL_STYLE);
+    SetWindowLong(FVUMeterWnd, GWL_STYLE,
+      (OldStyle and not (WS_POPUP or WS_CAPTION or WS_THICKFRAME or WS_MINIMIZEBOX or WS_MAXIMIZEBOX or WS_SYSMENU)) or WS_CHILD);
+
+    Winapi.Windows.SetParent(FVUMeterWnd, PanelVUMeter.Handle);
+    SetWindowPos(FVUMeterWnd, 0, 0, 0, PanelVUMeter.ClientWidth, PanelVUMeter.ClientHeight,
+      SWP_NOZORDER or SWP_FRAMECHANGED or SWP_SHOWWINDOW);
+
+    PanelVUMeter.Caption := '';
+  end
+  else if FVUMeterCheckAttempts >= 30 then
+  begin
+    TimerVUMeter.Enabled := False;
+    PanelVUMeter.Caption := 'VU Meter em execucao';
+  end;
+end;
+
+procedure TForm1.FecharVUMeter;
+begin
+  TimerVUMeter.Enabled := False;
+  if (FVUMeterProcessInfo.hProcess <> 0) then
+  begin
+    TerminateProcess(FVUMeterProcessInfo.hProcess, 0);
+    CloseHandle(FVUMeterProcessInfo.hProcess);
+    CloseHandle(FVUMeterProcessInfo.hThread);
+    FVUMeterProcessInfo.hProcess := 0;
+  end;
+  FVUMeterWnd := 0;
 end;
 
 function TForm1.ObterDuracaoMP3_MS(const CaminhoArquivo: string): Int64;
@@ -248,14 +393,18 @@ begin
 
         Total := ListaTemp.Count;
 
-        TThread.Queue(nil,
+        TThread.Synchronize(nil,
           procedure
+          var
+            K: Integer;
           begin
             if CurrentScanId = FScanRequestId then
             begin
               lbDisponiveis.Items.BeginUpdate;
               try
-                lbDisponiveis.Items.Assign(ListaTemp);
+                lbDisponiveis.Items.Clear;
+                for K := 0 to ListaTemp.Count - 1 do
+                  lbDisponiveis.Items.Add(ListaTemp[K]);
               finally
                 lbDisponiveis.Items.EndUpdate;
               end;
@@ -265,7 +414,7 @@ begin
               ProgressBar1.Style := pbstNormal;
               ProgressBar1.Position := 0;
 
-              MemoLog.Lines.Add(Format('Concluído! %d arquivos encontrados na pasta.', [Total]));
+              MemoLog.Lines.Add(Format('Concluido! %d arquivos carregados na lista.', [lbDisponiveis.Items.Count]));
             end;
           end);
       finally
@@ -490,6 +639,8 @@ begin
               FPlayerPausado := False;
               lblPlayerStatus.Caption := '▶ ' + NomeArquivo;
               MemoLog.Lines.Add('A reproduzir: ' + NomeArquivo);
+              if (FVUMeterWnd = 0) or not IsWindow(FVUMeterWnd) then
+                IniciarVUMeter;
             end;
           end);
       end
@@ -748,6 +899,6 @@ begin
 end;
 
 initialization
-  RegisterClasses([TLabel, TListBox, TButton, TEdit, TProgressBar, TMemo]);
+  RegisterClasses([TLabel, TListBox, TButton, TEdit, TProgressBar, TMemo, TPanel, TTimer]);
 
 end.

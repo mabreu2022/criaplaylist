@@ -69,6 +69,12 @@ O objetivo do programa é eliminar tarefas manuais e lentas na montagem de progr
 - Proteção inteligente contra pastas protegidas do Windows (`$RECYCLE.BIN`, `System Volume Information`), prevenindo erros de permissão negada.
 - Barra de progresso com animação **Marquee** enquanto varre as pastas.
 
+### 🎚️ 5. VU Meter Analógico Integrado à Interface
+- Integração visual embutida do clássico **VUMeter** com ponteiros estéreo analógicos no painel do programa.
+- Monitoramento em tempo real dos níveis de áudio do Windows durante a reprodução de faixas.
+- Detecção dinâmica do caminho executável (`vu_meter\VUMeter.exe`), funcionando em qualquer computador, pasta de instalação ou ambiente de desenvolvimento sem caminhos engessados.
+- Gerenciamento automático de processo e descarregamento limpo de memória ao fechar a aplicação.
+
 ---
 
 ## 🖼️ Interface do Sistema

@@ -2,7 +2,7 @@ object Form1: TForm1
   Left = 0
   Top = 0
   Caption = 'Gerador de Playlists e Rota'#231#245'es - ZaraRadio'
-  ClientHeight = 540
+  ClientHeight = 585
   ClientWidth = 1420
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
@@ -279,20 +279,44 @@ object Form1: TForm1
     TabOrder = 20
     OnClick = btnSalvarLstClick
   end
-  object ProgressBar1: TProgressBar
+  object PanelVUMeter: TPanel
     Left = 20
     Top = 415
-    Width = 1385
-    Height = 17
+    Width = 380
+    Height = 135
+    BevelOuter = bvLowered
+    Color = clBlack
+    ParentBackground = False
+    Caption = 'Carregando VU Meter...'
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = clSilver
+    Font.Height = -11
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     TabOrder = 21
   end
   object MemoLog: TMemo
-    Left = 20
-    Top = 440
-    Width = 1385
-    Height = 85
+    Left = 415
+    Top = 415
+    Width = 990
+    Height = 135
     ReadOnly = True
     ScrollBars = ssVertical
     TabOrder = 22
+  end
+  object ProgressBar1: TProgressBar
+    Left = 20
+    Top = 558
+    Width = 1385
+    Height = 16
+    TabOrder = 23
+  end
+  object TimerVUMeter: TTimer
+    Enabled = False
+    Interval = 150
+    OnTimer = TimerVUMeterTimer
+    Left = 330
+    Top = 425
   end
 end

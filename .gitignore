@@ -2,6 +2,8 @@
 *.dcu
 *.exe
 !aplicativos/*.exe
+!vu_meter/*.exe
+*.zip
 *.dcp
 *.bpl
 *.drc
