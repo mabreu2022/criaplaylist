@@ -1,4 +1,4 @@
-﻿unit UnitPrincipal;
+unit UnitPrincipal;
 
 interface
 
@@ -108,6 +108,7 @@ type
     FPlayerTocando: Boolean;
     FPlayerPausado: Boolean;
     FPlayRequestId: Integer;
+    FScanRequestId: Integer;
     function ObterDuracaoMP3_MS(const CaminhoArquivo: string): Int64;
     procedure CarregarArquivosDiretorio(const Pasta: string);
     procedure AtualizarPreviewLst;
@@ -130,6 +131,8 @@ begin
   MemoLog.Clear;
   FPlayerTocando := False;
   FPlayerPausado := False;
+  FPlayRequestId := 0;
+  FScanRequestId := 0;
   AtualizarPreviewLst;
 end;
 
@@ -161,30 +164,111 @@ end;
 
 procedure TForm1.CarregarArquivosDiretorio(const Pasta: string);
 var
-  Arquivos: TArray<string>;
-  Caminho: string;
+  CurrentScanId: Integer;
 begin
+  if not TDirectory.Exists(Pasta) then
+  begin
+    ShowMessage('Diretório não encontrado: ' + Pasta);
+    Exit;
+  end;
+
+  Inc(FScanRequestId);
+  CurrentScanId := FScanRequestId;
+
   lbDisponiveis.Items.BeginUpdate;
   try
     lbDisponiveis.Items.Clear;
-    Arquivos := TDirectory.GetFiles(Pasta, '*.*', TSearchOption.soAllDirectories,
-      function(const Path: string; const SearchRec: TSearchRec): Boolean
-      var
-        Ext: string;
-      begin
-        Ext := LowerCase(ExtractFileExt(SearchRec.Name));
-        Result := (Ext = '.mp3') or (Ext = '.mp4') or (Ext = '.wav') or
-                  (Ext = '.wma') or (Ext = '.ogg') or (Ext = '.m4a') or (Ext = '.aac');
-      end);
-    TArray.Sort<string>(Arquivos);
-
-    for Caminho in Arquivos do
-      lbDisponiveis.Items.Add(Caminho);
-
-    MemoLog.Lines.Add(Format('%d arquivos encontrados na pasta.', [Length(Arquivos)]));
   finally
     lbDisponiveis.Items.EndUpdate;
   end;
+
+  btnSelecionarPasta.Enabled := False;
+  btnSelecionarPasta.Caption := 'A ler...';
+  ProgressBar1.Style := pbstMarquee;
+  MemoLog.Lines.Add('A varrer diretório em segundo plano: ' + Pasta + ' ...');
+
+  TThread.CreateAnonymousThread(
+    procedure
+    var
+      ListaTemp: TStringList;
+      PastasQueue: TQueue<string>;
+      PastaAtual: string;
+      SR: TSearchRec;
+      Ext: string;
+      Total: Integer;
+    begin
+      ListaTemp := TStringList.Create;
+      PastasQueue := TQueue<string>.Create;
+      try
+        PastasQueue.Enqueue(Pasta);
+
+        while (PastasQueue.Count > 0) and (CurrentScanId = FScanRequestId) do
+        begin
+          PastaAtual := PastasQueue.Dequeue;
+
+          if FindFirst(TPath.Combine(PastaAtual, '*.*'), faAnyFile, SR) = 0 then
+          begin
+            try
+              repeat
+                if (SR.Name = '.') or (SR.Name = '..') then
+                  Continue;
+
+                if (SR.Attr and faDirectory) <> 0 then
+                begin
+                  // Ignora pastas de sistema e lixeira para prevenir travamentos e erros de permissão
+                  if not SameText(SR.Name, '$RECYCLE.BIN') and
+                     not SameText(SR.Name, 'System Volume Information') and
+                     not SameText(SR.Name, '$Recycle.Bin') then
+                  begin
+                    PastasQueue.Enqueue(TPath.Combine(PastaAtual, SR.Name));
+                  end;
+                end
+                else
+                begin
+                  Ext := LowerCase(ExtractFileExt(SR.Name));
+                  if (Ext = '.mp3') or (Ext = '.mp4') or (Ext = '.wav') or
+                     (Ext = '.wma') or (Ext = '.ogg') or (Ext = '.m4a') or (Ext = '.aac') then
+                  begin
+                    ListaTemp.Add(TPath.Combine(PastaAtual, SR.Name));
+                  end;
+                end;
+              until FindNext(SR) <> 0;
+            finally
+              FindClose(SR);
+            end;
+          end;
+        end;
+
+        if CurrentScanId = FScanRequestId then
+          ListaTemp.Sort;
+
+        Total := ListaTemp.Count;
+
+        TThread.Queue(nil,
+          procedure
+          begin
+            if CurrentScanId = FScanRequestId then
+            begin
+              lbDisponiveis.Items.BeginUpdate;
+              try
+                lbDisponiveis.Items.Assign(ListaTemp);
+              finally
+                lbDisponiveis.Items.EndUpdate;
+              end;
+
+              btnSelecionarPasta.Caption := 'Localizar...';
+              btnSelecionarPasta.Enabled := True;
+              ProgressBar1.Style := pbstNormal;
+              ProgressBar1.Position := 0;
+
+              MemoLog.Lines.Add(Format('Concluído! %d arquivos encontrados na pasta.', [Total]));
+            end;
+          end);
+      finally
+        PastasQueue.Free;
+        ListaTemp.Free;
+      end;
+    end).Start;
 end;
 
 procedure TForm1.btnSelecionarPastaClick(Sender: TObject);
