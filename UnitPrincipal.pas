@@ -195,20 +195,20 @@ begin
   AppDir := ExtractFilePath(Application.ExeName);
 
   // 1. Subpasta vu_meter junto ao executavel (Modo Producao / Instalador)
-  Caminho := TPath.Combine(AppDir, 'vu_meterVUMeter.exe');
-  if TFile.Exists(Caminho) then Exit(Caminho);
+  Caminho := AppDir + 'vu_meter\VUMeter.exe';
+  if FileExists(Caminho) then Exit(Caminho);
 
   // 2. No mesmo diretorio do executavel
-  Caminho := TPath.Combine(AppDir, 'VUMeter.exe');
-  if TFile.Exists(Caminho) then Exit(Caminho);
+  Caminho := AppDir + 'VUMeter.exe';
+  if FileExists(Caminho) then Exit(Caminho);
 
-  // 3. Subindo dois niveis (executando dentro de Win32Debug ou Win32Release no Delphi IDE)
-  Caminho := TPath.GetFullPath(TPath.Combine(AppDir, '....u_meterVUMeter.exe'));
-  if TFile.Exists(Caminho) then Exit(Caminho);
+  // 3. Subindo dois niveis (executando dentro de Win32\Debug ou Win32\Release no Delphi IDE)
+  Caminho := ExpandFileName(AppDir + '..\..\vu_meter\VUMeter.exe');
+  if FileExists(Caminho) then Exit(Caminho);
 
   // 4. Subindo um nivel
-  Caminho := TPath.GetFullPath(TPath.Combine(AppDir, '..u_meterVUMeter.exe'));
-  if TFile.Exists(Caminho) then Exit(Caminho);
+  Caminho := ExpandFileName(AppDir + '..\vu_meter\VUMeter.exe');
+  if FileExists(Caminho) then Exit(Caminho);
 
   Result := '';
 end;
