@@ -171,6 +171,28 @@ begin
     SetInformationJobObject(FJobHandle, JobObjectExtendedLimitInformation, @JobLimit, SizeOf(JobLimit));
   end;
 
+  // Configura exibição limpa (somente nome do arquivo) e tooltips com caminho completo
+  lbDisponiveis.Style := lbOwnerDrawFixed;
+  lbDisponiveis.ItemHeight := 18;
+  lbDisponiveis.OnDrawItem := ListBoxMusicasDrawItem;
+  lbDisponiveis.OnMouseMove := ListBoxMusicasMouseMove;
+  lbDisponiveis.ParentShowHint := False;
+  lbDisponiveis.ShowHint := True;
+
+  lbPlaylist.Style := lbOwnerDrawFixed;
+  lbPlaylist.ItemHeight := 18;
+  lbPlaylist.OnDrawItem := ListBoxMusicasDrawItem;
+  lbPlaylist.OnMouseMove := ListBoxMusicasMouseMove;
+  lbPlaylist.ParentShowHint := False;
+  lbPlaylist.ShowHint := True;
+
+  lbPlaylistLst.Style := lbOwnerDrawFixed;
+  lbPlaylistLst.ItemHeight := 18;
+  lbPlaylistLst.OnDrawItem := ListBoxMusicasDrawItem;
+  lbPlaylistLst.OnMouseMove := ListBoxMusicasMouseMove;
+  lbPlaylistLst.ParentShowHint := False;
+  lbPlaylistLst.ShowHint := True;
+
   try
     Icon.Handle := LoadIcon(HInstance, 'MAINICON');
   except
@@ -397,9 +419,14 @@ begin
     Exit;
 
   TextoCompleto := ListBox.Items[Index];
-  NomeExibicao := ExtractFileName(TextoCompleto);
-  if NomeExibicao = '' then
-    NomeExibicao := TextoCompleto;
+  if SameText(Trim(TextoCompleto), '.time') then
+    NomeExibicao := '.time (Hora Certa)'
+  else
+  begin
+    NomeExibicao := ExtractFileName(TextoCompleto);
+    if NomeExibicao = '' then
+      NomeExibicao := TextoCompleto;
+  end;
 
   // Preenche o fundo (clHighlight se selecionado, clWindow se padrão)
   ListBox.Canvas.FillRect(Rect);
@@ -873,12 +900,18 @@ procedure TForm1.btnBuscarRotClick(Sender: TObject);
 var
   OpenDlg: TOpenDialog;
   I: Integer;
+  PastaRot: string;
 begin
   OpenDlg := TOpenDialog.Create(Self);
   try
     OpenDlg.Filter := 'Arquivos de Rotação ZaraRadio (*.rot)|*.rot|Todos os arquivos (*.*)|*.*';
     OpenDlg.DefaultExt := 'rot';
     OpenDlg.Options := [ofAllowMultiSelect, ofFileMustExist];
+
+    PastaRot := ExtractFilePath(Application.ExeName) + 'rot';
+    if DirectoryExists(PastaRot) then
+      OpenDlg.InitialDir := PastaRot;
+
     if OpenDlg.Execute(Handle) then
     begin
       lbPlaylistLst.Items.BeginUpdate;
@@ -972,6 +1005,9 @@ begin
     SaveDlg.Filter := 'Playlist ZaraRadio (*.lst)|*.lst|Todos os arquivos (*.*)|*.*';
     SaveDlg.DefaultExt := 'lst';
     SaveDlg.FileName := 'playlist.lst';
+
+    if DirectoryExists(ExtractFilePath(Application.ExeName) + 'rot') then
+      SaveDlg.InitialDir := ExtractFilePath(Application.ExeName) + 'rot';
 
     if not SaveDlg.Execute(Handle) then
       Exit;
