@@ -1,4 +1,4 @@
-﻿unit UnitPrincipal;
+unit UnitPrincipal;
 
 interface
 
@@ -111,6 +111,8 @@ type
 
     // Evento do VU Meter
     procedure TimerVUMeterTimer(Sender: TObject);
+    procedure WMMove(var Msg: TWMMove); message WM_MOVE;
+    procedure WMWindowPosChanged(var Msg: TWMWindowPosChanged); message WM_WINDOWPOSCHANGED;
   private
     FPlayerTocando: Boolean;
     FPlayerPausado: Boolean;
@@ -122,6 +124,7 @@ type
     function ObterCaminhoVUMeter: string;
     procedure IniciarVUMeter;
     procedure FecharVUMeter;
+    procedure AjustarPosicaoVUMeter;
     function ObterDuracaoMP3_MS(const CaminhoArquivo: string): Int64;
     procedure CarregarArquivosDiretorio(const Pasta: string);
     procedure AtualizarPreviewLst;
@@ -213,6 +216,36 @@ begin
   Result := '';
 end;
 
+procedure TForm1.AjustarPosicaoVUMeter;
+var
+  Pt: TPoint;
+begin
+  if (FVUMeterWnd <> 0) and IsWindow(FVUMeterWnd) then
+  begin
+    if Visible and (WindowState <> wsMinimized) then
+    begin
+      Pt := PanelVUMeter.ClientToScreen(Point(0, 0));
+      SetWindowPos(FVUMeterWnd, HWND_TOP, Pt.X, Pt.Y,
+        PanelVUMeter.ClientWidth, PanelVUMeter.ClientHeight,
+        SWP_NOACTIVATE or SWP_SHOWWINDOW);
+    end
+    else
+      ShowWindow(FVUMeterWnd, SW_HIDE);
+  end;
+end;
+
+procedure TForm1.WMMove(var Msg: TWMMove);
+begin
+  inherited;
+  AjustarPosicaoVUMeter;
+end;
+
+procedure TForm1.WMWindowPosChanged(var Msg: TWMWindowPosChanged);
+begin
+  inherited;
+  AjustarPosicaoVUMeter;
+end;
+
 procedure TForm1.IniciarVUMeter;
 var
   ExePath: string;
@@ -220,8 +253,7 @@ var
 begin
   if (FVUMeterWnd <> 0) and IsWindow(FVUMeterWnd) then
   begin
-    SetWindowPos(FVUMeterWnd, 0, 0, 0, PanelVUMeter.ClientWidth, PanelVUMeter.ClientHeight,
-      SWP_NOZORDER or SWP_SHOWWINDOW);
+    AjustarPosicaoVUMeter;
     Exit;
   end;
 
@@ -239,6 +271,7 @@ begin
   if CreateProcess(PChar(ExePath), nil, nil, nil, False, 0, nil, nil, SI, FVUMeterProcessInfo) then
   begin
     FVUMeterCheckAttempts := 0;
+    TimerVUMeter.Interval := 100;
     TimerVUMeter.Enabled := True;
   end
   else
@@ -248,35 +281,32 @@ end;
 procedure TForm1.TimerVUMeterTimer(Sender: TObject);
 var
   Info: TEnumVUMeterInfo;
-  OldStyle: NativeInt;
 begin
-  Inc(FVUMeterCheckAttempts);
-
-  Info.PID := FVUMeterProcessInfo.dwProcessId;
-  Info.Wnd := 0;
-  EnumWindows(@EnumVUMeterProc, LPARAM(@Info));
-
-  if Info.Wnd <> 0 then
+  if (FVUMeterWnd = 0) or not IsWindow(FVUMeterWnd) then
   begin
-    TimerVUMeter.Enabled := False;
-    FVUMeterWnd := Info.Wnd;
+    Inc(FVUMeterCheckAttempts);
 
-    // Remove bordas e barra para embutir na interface do programa
-    OldStyle := GetWindowLong(FVUMeterWnd, GWL_STYLE);
-    SetWindowLong(FVUMeterWnd, GWL_STYLE,
-      (OldStyle and not (WS_POPUP or WS_CAPTION or WS_THICKFRAME or WS_MINIMIZEBOX or WS_MAXIMIZEBOX or WS_SYSMENU)) or WS_CHILD);
+    Info.PID := FVUMeterProcessInfo.dwProcessId;
+    Info.Wnd := 0;
+    EnumWindows(@EnumVUMeterProc, LPARAM(@Info));
 
-    Winapi.Windows.SetParent(FVUMeterWnd, PanelVUMeter.Handle);
-    SetWindowPos(FVUMeterWnd, 0, 0, 0, PanelVUMeter.ClientWidth, PanelVUMeter.ClientHeight,
-      SWP_NOZORDER or SWP_FRAMECHANGED or SWP_SHOWWINDOW);
-
-    PanelVUMeter.Caption := '';
+    if Info.Wnd <> 0 then
+    begin
+      FVUMeterWnd := Info.Wnd;
+      // Define Form1 como proprietario para sincronizar foco, minimizar e restaurar
+      SetWindowLong(FVUMeterWnd, GWL_HWNDPARENT, Handle);
+      AjustarPosicaoVUMeter;
+      PanelVUMeter.Caption := '';
+      TimerVUMeter.Interval := 250;
+    end
+    else if FVUMeterCheckAttempts >= 30 then
+    begin
+      TimerVUMeter.Enabled := False;
+      PanelVUMeter.Caption := 'VU Meter em execucao externa';
+    end;
   end
-  else if FVUMeterCheckAttempts >= 30 then
-  begin
-    TimerVUMeter.Enabled := False;
-    PanelVUMeter.Caption := 'VU Meter em execucao';
-  end;
+  else
+    AjustarPosicaoVUMeter;
 end;
 
 procedure TForm1.FecharVUMeter;
@@ -393,7 +423,7 @@ begin
 
         Total := ListaTemp.Count;
 
-        TThread.Synchronize(nil,
+        TThread.Synchronize(TThread.CurrentThread,
           procedure
           var
             K: Integer;
@@ -564,24 +594,19 @@ end;
 
 procedure TForm1.PararAudio;
 begin
-  // Invalida requisições de áudio anteriores
-  Inc(FPlayRequestId);
   FPlayerTocando := False;
   FPlayerPausado := False;
   lblPlayerStatus.Caption := 'Player: Parado';
 
-  // Fecha o dispositivo em thread para não travar a interface
-  TThread.CreateAnonymousThread(
-    procedure
-    begin
-      mciSendString('stop mp3player', nil, 0, 0);
-      mciSendString('close mp3player', nil, 0, 0);
-    end).Start;
+  mciSendString('stop mp3player', nil, 0, 0);
+  mciSendString('close mp3player', nil, 0, 0);
 end;
 
 procedure TForm1.TocarAudio(const Caminho: string);
 var
-  CurrentReq: Integer;
+  Cmd: string;
+  Ret: Cardinal;
+  NomeArquivo: string;
 begin
   if not TFile.Exists(Caminho) then
   begin
@@ -589,76 +614,40 @@ begin
     Exit;
   end;
 
-  Inc(FPlayRequestId);
-  CurrentReq := FPlayRequestId;
+  NomeArquivo := ExtractFileName(Caminho);
 
-  FPlayerTocando := True;
-  FPlayerPausado := False;
-  lblPlayerStatus.Caption := 'Carregando: ' + ExtractFileName(Caminho);
+  // Fecha qualquer reprodução ativa com segurança
+  mciSendString('stop mp3player', nil, 0, 0);
+  mciSendString('close mp3player', nil, 0, 0);
 
-  TThread.CreateAnonymousThread(
-    procedure
-    var
-      Cmd: string;
-      Ret: Cardinal;
-      NomeArquivo: string;
-    begin
-      // Para e fecha qualquer reprodução anterior
-      mciSendString('stop mp3player', nil, 0, 0);
-      mciSendString('close mp3player', nil, 0, 0);
+  Cmd := Format('open "%s" type mpegvideo alias mp3player', [Caminho]);
+  Ret := mciSendString(PChar(Cmd), nil, 0, 0);
+  if Ret <> 0 then
+  begin
+    Cmd := Format('open "%s" alias mp3player', [Caminho]);
+    Ret := mciSendString(PChar(Cmd), nil, 0, 0);
+  end;
 
-      // Se uma nova música já foi clicada enquanto esta fechava a anterior, cancela
-      if CurrentReq <> FPlayRequestId then
-        Exit;
+  if Ret = 0 then
+  begin
+    mciSendString('play mp3player', nil, 0, 0);
+    FPlayerTocando := True;
+    FPlayerPausado := False;
+    lblPlayerStatus.Caption := '▶ ' + NomeArquivo;
+    MemoLog.Lines.Add('A reproduzir: ' + NomeArquivo);
 
-      Cmd := Format('open "%s" type mpegvideo alias mp3player', [Caminho]);
-      Ret := mciSendString(PChar(Cmd), nil, 0, 0);
-      if Ret <> 0 then
-      begin
-        Cmd := Format('open "%s" alias mp3player', [Caminho]);
-        Ret := mciSendString(PChar(Cmd), nil, 0, 0);
-      end;
-
-      if CurrentReq <> FPlayRequestId then
-      begin
-        mciSendString('close mp3player', nil, 0, 0);
-        Exit;
-      end;
-
-      NomeArquivo := ExtractFileName(Caminho);
-
-      if Ret = 0 then
-      begin
-        mciSendString('play mp3player', nil, 0, 0);
-        TThread.Queue(nil,
-          procedure
-          begin
-            if CurrentReq = FPlayRequestId then
-            begin
-              FPlayerTocando := True;
-              FPlayerPausado := False;
-              lblPlayerStatus.Caption := '▶ ' + NomeArquivo;
-              MemoLog.Lines.Add('A reproduzir: ' + NomeArquivo);
-              if (FVUMeterWnd = 0) or not IsWindow(FVUMeterWnd) then
-                IniciarVUMeter;
-            end;
-          end);
-      end
-      else
-      begin
-        TThread.Queue(nil,
-          procedure
-          begin
-            if CurrentReq = FPlayRequestId then
-            begin
-              FPlayerTocando := False;
-              FPlayerPausado := False;
-              lblPlayerStatus.Caption := 'Erro ao reproduzir';
-              MemoLog.Lines.Add('Não foi possível tocar: ' + NomeArquivo);
-            end;
-          end);
-      end;
-    end).Start;
+    if (FVUMeterWnd = 0) or not IsWindow(FVUMeterWnd) then
+      IniciarVUMeter
+    else
+      AjustarPosicaoVUMeter;
+  end
+  else
+  begin
+    FPlayerTocando := False;
+    FPlayerPausado := False;
+    lblPlayerStatus.Caption := 'Erro ao reproduzir';
+    MemoLog.Lines.Add('Não foi possível tocar: ' + NomeArquivo);
+  end;
 end;
 
 procedure TForm1.btnPlayClick(Sender: TObject);
@@ -669,11 +658,7 @@ begin
   begin
     FPlayerPausado := False;
     lblPlayerStatus.Caption := '▶ Em reprodução...';
-    TThread.CreateAnonymousThread(
-      procedure
-      begin
-        mciSendString('resume mp3player', nil, 0, 0);
-      end).Start;
+    mciSendString('resume mp3player', nil, 0, 0);
     Exit;
   end;
 
@@ -697,21 +682,13 @@ begin
     begin
       FPlayerPausado := True;
       lblPlayerStatus.Caption := '⏸ Pausado';
-      TThread.CreateAnonymousThread(
-        procedure
-        begin
-          mciSendString('pause mp3player', nil, 0, 0);
-        end).Start;
+      mciSendString('pause mp3player', nil, 0, 0);
     end
     else
     begin
       FPlayerPausado := False;
       lblPlayerStatus.Caption := '▶ Em reprodução...';
-      TThread.CreateAnonymousThread(
-        procedure
-        begin
-          mciSendString('resume mp3player', nil, 0, 0);
-        end).Start;
+      mciSendString('resume mp3player', nil, 0, 0);
     end;
   end;
 end;
