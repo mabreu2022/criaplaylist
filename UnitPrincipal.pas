@@ -86,6 +86,8 @@ type
 
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
+    procedure FormClose(Sender: TObject; var Action: TCloseAction);
+    procedure FormResize(Sender: TObject);
     procedure btnSelecionarPastaClick(Sender: TObject);
     procedure btnAdicionarClick(Sender: TObject);
     procedure btnAdicionarTodosClick(Sender: TObject);
@@ -111,8 +113,6 @@ type
 
     // Evento do VU Meter
     procedure TimerVUMeterTimer(Sender: TObject);
-    procedure WMMove(var Msg: TWMMove); message WM_MOVE;
-    procedure WMWindowPosChanged(var Msg: TWMWindowPosChanged); message WM_WINDOWPOSCHANGED;
   private
     FPlayerTocando: Boolean;
     FPlayerPausado: Boolean;
@@ -159,12 +159,27 @@ begin
   IniciarVUMeter;
 end;
 
+procedure TForm1.FormClose(Sender: TObject; var Action: TCloseAction);
+begin
+  PararAudio;
+  FecharVUMeter;
+end;
+
 procedure TForm1.FormDestroy(Sender: TObject);
 begin
   PararAudio;
   FecharVUMeter;
   MFShutdown;
   CoUninitialize;
+end;
+
+procedure TForm1.FormResize(Sender: TObject);
+begin
+  if (FVUMeterWnd <> 0) and IsWindow(FVUMeterWnd) then
+  begin
+    SetWindowPos(FVUMeterWnd, 0, 0, 0, PanelVUMeter.ClientWidth, PanelVUMeter.ClientHeight,
+      SWP_NOZORDER or SWP_NOACTIVATE or SWP_SHOWWINDOW);
+  end;
 end;
 
 type
@@ -217,33 +232,12 @@ begin
 end;
 
 procedure TForm1.AjustarPosicaoVUMeter;
-var
-  Pt: TPoint;
 begin
   if (FVUMeterWnd <> 0) and IsWindow(FVUMeterWnd) then
   begin
-    if Visible and (WindowState <> wsMinimized) then
-    begin
-      Pt := PanelVUMeter.ClientToScreen(Point(0, 0));
-      SetWindowPos(FVUMeterWnd, HWND_TOP, Pt.X, Pt.Y,
-        PanelVUMeter.ClientWidth, PanelVUMeter.ClientHeight,
-        SWP_NOACTIVATE or SWP_SHOWWINDOW);
-    end
-    else
-      ShowWindow(FVUMeterWnd, SW_HIDE);
+    SetWindowPos(FVUMeterWnd, 0, 0, 0, PanelVUMeter.ClientWidth, PanelVUMeter.ClientHeight,
+      SWP_NOZORDER or SWP_NOACTIVATE or SWP_SHOWWINDOW);
   end;
-end;
-
-procedure TForm1.WMMove(var Msg: TWMMove);
-begin
-  inherited;
-  AjustarPosicaoVUMeter;
-end;
-
-procedure TForm1.WMWindowPosChanged(var Msg: TWMWindowPosChanged);
-begin
-  inherited;
-  AjustarPosicaoVUMeter;
 end;
 
 procedure TForm1.IniciarVUMeter;
@@ -281,6 +275,7 @@ end;
 procedure TForm1.TimerVUMeterTimer(Sender: TObject);
 var
   Info: TEnumVUMeterInfo;
+  OldStyle: NativeInt;
 begin
   if (FVUMeterWnd = 0) or not IsWindow(FVUMeterWnd) then
   begin
@@ -292,33 +287,63 @@ begin
 
     if Info.Wnd <> 0 then
     begin
+      TimerVUMeter.Enabled := False;
       FVUMeterWnd := Info.Wnd;
-      // Define Form1 como proprietario para sincronizar foco, minimizar e restaurar
-      SetWindowLong(FVUMeterWnd, GWL_HWNDPARENT, Handle);
-      AjustarPosicaoVUMeter;
+
+      // Remove barra de titulo e bordas externas para embutir na interface
+      OldStyle := GetWindowLong(FVUMeterWnd, GWL_STYLE);
+      SetWindowLong(FVUMeterWnd, GWL_STYLE,
+        (OldStyle and not (WS_POPUP or WS_CAPTION or WS_THICKFRAME or WS_MINIMIZEBOX or WS_MAXIMIZEBOX or WS_SYSMENU)) or WS_CHILD);
+
+      Winapi.Windows.SetParent(FVUMeterWnd, PanelVUMeter.Handle);
+      SetWindowPos(FVUMeterWnd, 0, 0, 0, PanelVUMeter.ClientWidth, PanelVUMeter.ClientHeight,
+        SWP_NOZORDER or SWP_FRAMECHANGED or SWP_SHOWWINDOW);
+
       PanelVUMeter.Caption := '';
-      TimerVUMeter.Interval := 250;
     end
     else if FVUMeterCheckAttempts >= 30 then
     begin
       TimerVUMeter.Enabled := False;
-      PanelVUMeter.Caption := 'VU Meter em execucao externa';
+      PanelVUMeter.Caption := 'VU Meter em execucao';
     end;
   end
   else
+  begin
+    TimerVUMeter.Enabled := False;
     AjustarPosicaoVUMeter;
+  end;
 end;
 
 procedure TForm1.FecharVUMeter;
+var
+  hProc: THandle;
 begin
   TimerVUMeter.Enabled := False;
+
+  if (FVUMeterWnd <> 0) and IsWindow(FVUMeterWnd) then
+  begin
+    PostMessage(FVUMeterWnd, WM_CLOSE, 0, 0);
+    ShowWindow(FVUMeterWnd, SW_HIDE);
+  end;
+
   if (FVUMeterProcessInfo.hProcess <> 0) then
   begin
     TerminateProcess(FVUMeterProcessInfo.hProcess, 0);
     CloseHandle(FVUMeterProcessInfo.hProcess);
     CloseHandle(FVUMeterProcessInfo.hThread);
     FVUMeterProcessInfo.hProcess := 0;
+  end
+  else if FVUMeterProcessInfo.dwProcessId <> 0 then
+  begin
+    hProc := OpenProcess(PROCESS_TERMINATE, False, FVUMeterProcessInfo.dwProcessId);
+    if hProc <> 0 then
+    begin
+      TerminateProcess(hProc, 0);
+      CloseHandle(hProc);
+    end;
   end;
+
+  FVUMeterProcessInfo.dwProcessId := 0;
   FVUMeterWnd := 0;
 end;
 
@@ -458,10 +483,10 @@ procedure TForm1.btnSelecionarPastaClick(Sender: TObject);
 var
   Dlg: TFileOpenDialog;
 begin
-  Dlg := TFileOpenDialog.Create(nil);
+  Dlg := TFileOpenDialog.Create(Self);
   try
-    Dlg.Options := [fdoPickFolders];
-    if Dlg.Execute then
+    Dlg.Options := [fdoPickFolders, fdoPathMustExist];
+    if Dlg.Execute(Handle) then
     begin
       edtPasta.Text := Dlg.FileName;
       CarregarArquivosDiretorio(Dlg.FileName);
@@ -537,13 +562,13 @@ begin
     Exit;
   end;
 
-  SaveDlg := TSaveDialog.Create(nil);
+  SaveDlg := TSaveDialog.Create(Self);
   try
     SaveDlg.Filter := 'Playlist ZaraRadio (*.rot)|*.rot|Playlist ZaraRadio (*.lst)|*.lst|Todos os arquivos (*.*)|*.*';
     SaveDlg.DefaultExt := 'rot';
     SaveDlg.FileName := 'playlist.rot';
 
-    if not SaveDlg.Execute then
+    if not SaveDlg.Execute(Handle) then
       Exit;
 
     btnSalvarPlaylist.Enabled := False;
@@ -582,6 +607,8 @@ begin
     finally
       ListaSaida.Free;
       btnSalvarPlaylist.Enabled := True;
+      ProgressBar1.Position := 0;
+      ProgressBar1.Style := pbstNormal;
     end;
   finally
     SaveDlg.Free;
@@ -745,12 +772,12 @@ var
   OpenDlg: TOpenDialog;
   I: Integer;
 begin
-  OpenDlg := TOpenDialog.Create(nil);
+  OpenDlg := TOpenDialog.Create(Self);
   try
     OpenDlg.Filter := 'Arquivos de Rotação ZaraRadio (*.rot)|*.rot|Todos os arquivos (*.*)|*.*';
     OpenDlg.DefaultExt := 'rot';
     OpenDlg.Options := [ofAllowMultiSelect, ofFileMustExist];
-    if OpenDlg.Execute then
+    if OpenDlg.Execute(Handle) then
     begin
       lbPlaylistLst.Items.BeginUpdate;
       try
@@ -838,13 +865,13 @@ begin
     Exit;
   end;
 
-  SaveDlg := TSaveDialog.Create(nil);
+  SaveDlg := TSaveDialog.Create(Self);
   try
     SaveDlg.Filter := 'Playlist ZaraRadio (*.lst)|*.lst|Todos os arquivos (*.*)|*.*';
     SaveDlg.DefaultExt := 'lst';
     SaveDlg.FileName := 'playlist.lst';
 
-    if not SaveDlg.Execute then
+    if not SaveDlg.Execute(Handle) then
       Exit;
 
     ListaSaida := TStringList.Create;
@@ -869,6 +896,8 @@ begin
       ShowMessage('Playlist Master (.lst) gerada com sucesso para o ZaraRadio!');
     finally
       ListaSaida.Free;
+      ProgressBar1.Position := 0;
+      ProgressBar1.Style := pbstNormal;
     end;
   finally
     SaveDlg.Free;
