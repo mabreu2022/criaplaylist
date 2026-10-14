@@ -107,6 +107,7 @@ type
   private
     FPlayerTocando: Boolean;
     FPlayerPausado: Boolean;
+    FPlayRequestId: Integer;
     function ObterDuracaoMP3_MS(const CaminhoArquivo: string): Int64;
     procedure CarregarArquivosDiretorio(const Pasta: string);
     procedure AtualizarPreviewLst;
@@ -321,22 +322,29 @@ begin
 end;
 
 // =========================================================================
-// MÉTODOS DO PLAYER DE ÁUDIO
+// MÉTODOS DO PLAYER DE ÁUDIO (EM THREAD / ASSÍNCRONO)
 // =========================================================================
 
 procedure TForm1.PararAudio;
 begin
-  mciSendString('stop mp3player', nil, 0, 0);
-  mciSendString('close mp3player', nil, 0, 0);
+  // Invalida requisições de áudio anteriores
+  Inc(FPlayRequestId);
   FPlayerTocando := False;
   FPlayerPausado := False;
   lblPlayerStatus.Caption := 'Player: Parado';
+
+  // Fecha o dispositivo em thread para não travar a interface
+  TThread.CreateAnonymousThread(
+    procedure
+    begin
+      mciSendString('stop mp3player', nil, 0, 0);
+      mciSendString('close mp3player', nil, 0, 0);
+    end).Start;
 end;
 
 procedure TForm1.TocarAudio(const Caminho: string);
 var
-  Cmd: string;
-  Ret: Cardinal;
+  CurrentReq: Integer;
 begin
   if not TFile.Exists(Caminho) then
   begin
@@ -344,29 +352,74 @@ begin
     Exit;
   end;
 
-  PararAudio;
+  Inc(FPlayRequestId);
+  CurrentReq := FPlayRequestId;
 
-  Cmd := Format('open "%s" type mpegvideo alias mp3player', [Caminho]);
-  Ret := mciSendString(PChar(Cmd), nil, 0, 0);
-  if Ret <> 0 then
-  begin
-    Cmd := Format('open "%s" alias mp3player', [Caminho]);
-    Ret := mciSendString(PChar(Cmd), nil, 0, 0);
-  end;
+  FPlayerTocando := True;
+  FPlayerPausado := False;
+  lblPlayerStatus.Caption := 'Carregando: ' + ExtractFileName(Caminho);
 
-  if Ret = 0 then
-  begin
-    mciSendString('play mp3player', nil, 0, 0);
-    FPlayerTocando := True;
-    FPlayerPausado := False;
-    lblPlayerStatus.Caption := '▶ ' + ExtractFileName(Caminho);
-    MemoLog.Lines.Add('A reproduzir: ' + ExtractFileName(Caminho));
-  end
-  else
-  begin
-    lblPlayerStatus.Caption := 'Erro ao reproduzir';
-    MemoLog.Lines.Add('Não foi possível tocar: ' + ExtractFileName(Caminho));
-  end;
+  TThread.CreateAnonymousThread(
+    procedure
+    var
+      Cmd: string;
+      Ret: Cardinal;
+      NomeArquivo: string;
+    begin
+      // Para e fecha qualquer reprodução anterior
+      mciSendString('stop mp3player', nil, 0, 0);
+      mciSendString('close mp3player', nil, 0, 0);
+
+      // Se uma nova música já foi clicada enquanto esta fechava a anterior, cancela
+      if CurrentReq <> FPlayRequestId then
+        Exit;
+
+      Cmd := Format('open "%s" type mpegvideo alias mp3player', [Caminho]);
+      Ret := mciSendString(PChar(Cmd), nil, 0, 0);
+      if Ret <> 0 then
+      begin
+        Cmd := Format('open "%s" alias mp3player', [Caminho]);
+        Ret := mciSendString(PChar(Cmd), nil, 0, 0);
+      end;
+
+      if CurrentReq <> FPlayRequestId then
+      begin
+        mciSendString('close mp3player', nil, 0, 0);
+        Exit;
+      end;
+
+      NomeArquivo := ExtractFileName(Caminho);
+
+      if Ret = 0 then
+      begin
+        mciSendString('play mp3player', nil, 0, 0);
+        TThread.Queue(nil,
+          procedure
+          begin
+            if CurrentReq = FPlayRequestId then
+            begin
+              FPlayerTocando := True;
+              FPlayerPausado := False;
+              lblPlayerStatus.Caption := '▶ ' + NomeArquivo;
+              MemoLog.Lines.Add('A reproduzir: ' + NomeArquivo);
+            end;
+          end);
+      end
+      else
+      begin
+        TThread.Queue(nil,
+          procedure
+          begin
+            if CurrentReq = FPlayRequestId then
+            begin
+              FPlayerTocando := False;
+              FPlayerPausado := False;
+              lblPlayerStatus.Caption := 'Erro ao reproduzir';
+              MemoLog.Lines.Add('Não foi possível tocar: ' + NomeArquivo);
+            end;
+          end);
+      end;
+    end).Start;
 end;
 
 procedure TForm1.btnPlayClick(Sender: TObject);
@@ -375,9 +428,13 @@ var
 begin
   if FPlayerPausado then
   begin
-    mciSendString('resume mp3player', nil, 0, 0);
     FPlayerPausado := False;
     lblPlayerStatus.Caption := '▶ Em reprodução...';
+    TThread.CreateAnonymousThread(
+      procedure
+      begin
+        mciSendString('resume mp3player', nil, 0, 0);
+      end).Start;
     Exit;
   end;
 
@@ -399,15 +456,23 @@ begin
   begin
     if not FPlayerPausado then
     begin
-      mciSendString('pause mp3player', nil, 0, 0);
       FPlayerPausado := True;
       lblPlayerStatus.Caption := '⏸ Pausado';
+      TThread.CreateAnonymousThread(
+        procedure
+        begin
+          mciSendString('pause mp3player', nil, 0, 0);
+        end).Start;
     end
     else
     begin
-      mciSendString('resume mp3player', nil, 0, 0);
       FPlayerPausado := False;
       lblPlayerStatus.Caption := '▶ Em reprodução...';
+      TThread.CreateAnonymousThread(
+        procedure
+        begin
+          mciSendString('resume mp3player', nil, 0, 0);
+        end).Start;
     end;
   end;
 end;
