@@ -133,6 +133,10 @@ begin
   FPlayerPausado := False;
   FPlayRequestId := 0;
   FScanRequestId := 0;
+  try
+    Icon.Handle := LoadIcon(HInstance, 'MAINICON');
+  except
+  end;
   AtualizarPreviewLst;
 end;
 
