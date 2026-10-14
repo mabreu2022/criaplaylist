@@ -113,7 +113,10 @@ type
 
     // Evento do VU Meter
     procedure TimerVUMeterTimer(Sender: TObject);
+  protected
+    procedure DestroyWindowHandle; override;
   private
+    FJobHandle: THandle;
     FPlayerTocando: Boolean;
     FPlayerPausado: Boolean;
     FPlayRequestId: Integer;
@@ -141,6 +144,8 @@ implementation
 {$R *.dfm}
 
 procedure TForm1.FormCreate(Sender: TObject);
+var
+  JobLimit: JOBOBJECT_EXTENDED_LIMIT_INFORMATION;
 begin
   CoInitialize(nil);
   MFStartup(MF_VERSION);
@@ -151,12 +156,29 @@ begin
   FScanRequestId := 0;
   FVUMeterWnd := 0;
   FillChar(FVUMeterProcessInfo, SizeOf(FVUMeterProcessInfo), 0);
+
+  // Cria Job Object com limite KILL_ON_JOB_CLOSE para garantir que o VUMeter.exe
+  // seja encerrado pelo kernel do Windows mesmo se o depurador do Delphi interromper o processo
+  FJobHandle := CreateJobObject(nil, nil);
+  if FJobHandle <> 0 then
+  begin
+    FillChar(JobLimit, SizeOf(JobLimit), 0);
+    JobLimit.BasicLimitInformation.LimitFlags := JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    SetInformationJobObject(FJobHandle, JobObjectExtendedLimitInformation, @JobLimit, SizeOf(JobLimit));
+  end;
+
   try
     Icon.Handle := LoadIcon(HInstance, 'MAINICON');
   except
   end;
   AtualizarPreviewLst;
   IniciarVUMeter;
+end;
+
+procedure TForm1.DestroyWindowHandle;
+begin
+  FecharVUMeter;
+  inherited DestroyWindowHandle;
 end;
 
 procedure TForm1.FormClose(Sender: TObject; var Action: TCloseAction);
@@ -262,8 +284,11 @@ begin
   SI.cb := SizeOf(SI);
   FillChar(FVUMeterProcessInfo, SizeOf(FVUMeterProcessInfo), 0);
 
-  if CreateProcess(PChar(ExePath), nil, nil, nil, False, 0, nil, nil, SI, FVUMeterProcessInfo) then
+  if CreateProcess(PChar(ExePath), nil, nil, nil, False, CREATE_NEW_PROCESS_GROUP, nil, nil, SI, FVUMeterProcessInfo) then
   begin
+    if FJobHandle <> 0 then
+      AssignProcessToJobObject(FJobHandle, FVUMeterProcessInfo.hProcess);
+
     FVUMeterCheckAttempts := 0;
     TimerVUMeter.Interval := 100;
     TimerVUMeter.Enabled := True;
@@ -322,8 +347,11 @@ begin
 
   if (FVUMeterWnd <> 0) and IsWindow(FVUMeterWnd) then
   begin
-    PostMessage(FVUMeterWnd, WM_CLOSE, 0, 0);
+    // Desacopla da janela pai ANTES de qualquer ação para evitar
+    // falhas de callback (0xc000041d) na VCL/Windows/Direct2D
+    Winapi.Windows.SetParent(FVUMeterWnd, 0);
     ShowWindow(FVUMeterWnd, SW_HIDE);
+    PostMessage(FVUMeterWnd, WM_CLOSE, 0, 0);
   end;
 
   if (FVUMeterProcessInfo.hProcess <> 0) then
@@ -332,6 +360,7 @@ begin
     CloseHandle(FVUMeterProcessInfo.hProcess);
     CloseHandle(FVUMeterProcessInfo.hThread);
     FVUMeterProcessInfo.hProcess := 0;
+    FVUMeterProcessInfo.hThread := 0;
   end
   else if FVUMeterProcessInfo.dwProcessId <> 0 then
   begin
@@ -345,6 +374,12 @@ begin
 
   FVUMeterProcessInfo.dwProcessId := 0;
   FVUMeterWnd := 0;
+
+  if FJobHandle <> 0 then
+  begin
+    CloseHandle(FJobHandle);
+    FJobHandle := 0;
+  end;
 end;
 
 function TForm1.ObterDuracaoMP3_MS(const CaminhoArquivo: string): Int64;
