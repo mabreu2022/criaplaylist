@@ -17,29 +17,29 @@ object Form1: TForm1
   object lblPasta: TLabel
     Left = 20
     Top = 15
-    Width = 197
+    Width = 196
     Height = 15
     Caption = 'Diret'#243'rio com m'#250'sicas (MP3, MP4...):'
   end
   object lblDisponiveis: TLabel
     Left = 20
     Top = 70
-    Width = 127
+    Width = 112
     Height = 15
     Caption = 'M'#250'sicas do Diret'#243'rio:'
   end
   object lblPlaylist: TLabel
     Left = 385
     Top = 70
-    Width = 143
+    Width = 131
     Height = 15
     Caption = 'M'#250'sicas da Playlist (.rot):'
   end
   object lblPlayerStatus: TLabel
     Left = 222
     Top = 333
-    Width = 105
-    Height = 15
+    Width = 68
+    Height = 13
     Caption = 'Player: Parado'
     Font.Charset = DEFAULT_CHARSET
     Font.Color = clWindowText
@@ -51,7 +51,7 @@ object Form1: TForm1
   object lblPlaylistLst: TLabel
     Left = 710
     Top = 15
-    Width = 169
+    Width = 168
     Height = 15
     Caption = 'Playlist Master ZaraRadio (.lst):'
     Font.Charset = DEFAULT_CHARSET
@@ -64,7 +64,7 @@ object Form1: TForm1
   object lblPreviewLst: TLabel
     Left = 1060
     Top = 15
-    Width = 146
+    Width = 139
     Height = 15
     Caption = 'Preview do Arquivo .LST:'
     Font.Charset = DEFAULT_CHARSET
@@ -95,6 +95,7 @@ object Form1: TForm1
     Top = 90
     Width = 310
     Height = 230
+    ItemHeight = 15
     MultiSelect = True
     TabOrder = 2
     OnDblClick = lbDisponiveisDblClick
@@ -167,6 +168,7 @@ object Form1: TForm1
     Top = 90
     Width = 300
     Height = 270
+    ItemHeight = 15
     MultiSelect = True
     TabOrder = 10
     OnDblClick = lbPlaylistDblClick
@@ -218,6 +220,7 @@ object Form1: TForm1
     Top = 70
     Width = 275
     Height = 290
+    ItemHeight = 15
     MultiSelect = True
     TabOrder = 15
   end
@@ -285,14 +288,14 @@ object Form1: TForm1
     Width = 380
     Height = 135
     BevelOuter = bvLowered
-    Color = clBlack
-    ParentBackground = False
     Caption = 'Carregando VU Meter...'
+    Color = clBlack
     Font.Charset = DEFAULT_CHARSET
     Font.Color = clSilver
     Font.Height = -11
     Font.Name = 'Segoe UI'
     Font.Style = []
+    ParentBackground = False
     ParentFont = False
     TabOrder = 21
   end

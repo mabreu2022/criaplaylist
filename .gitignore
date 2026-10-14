@@ -4,6 +4,8 @@
 !aplicativos/*.exe
 !vu_meter/*.exe
 *.zip
+*.rar
+*.7z
 *.dcp
 *.bpl
 *.drc
