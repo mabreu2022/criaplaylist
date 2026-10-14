@@ -1,4 +1,4 @@
-﻿unit UnitPrincipal;
+unit UnitPrincipal;
 
 interface
 
@@ -113,6 +113,10 @@ type
 
     // Evento do VU Meter
     procedure TimerVUMeterTimer(Sender: TObject);
+
+    // Eventos visuais do ListBox (Exibição somente do nome do arquivo e Tooltip com caminho)
+    procedure ListBoxMusicasDrawItem(Control: TWinControl; Index: Integer; Rect: TRect; State: TOwnerDrawState);
+    procedure ListBoxMusicasMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
   protected
     procedure DestroyWindowHandle; override;
   private
@@ -380,6 +384,55 @@ begin
     CloseHandle(FJobHandle);
     FJobHandle := 0;
   end;
+end;
+
+procedure TForm1.ListBoxMusicasDrawItem(Control: TWinControl; Index: Integer;
+  Rect: TRect; State: TOwnerDrawState);
+var
+  ListBox: TListBox;
+  TextoCompleto, NomeExibicao: string;
+begin
+  ListBox := TListBox(Control);
+  if (Index < 0) or (Index >= ListBox.Items.Count) then
+    Exit;
+
+  TextoCompleto := ListBox.Items[Index];
+  NomeExibicao := ExtractFileName(TextoCompleto);
+  if NomeExibicao = '' then
+    NomeExibicao := TextoCompleto;
+
+  // Preenche o fundo (clHighlight se selecionado, clWindow se padrão)
+  ListBox.Canvas.FillRect(Rect);
+
+  // Espaçamento com margem interna para legibilidade
+  Rect.Left := Rect.Left + 5;
+  Rect.Right := Rect.Right - 4;
+
+  DrawText(ListBox.Canvas.Handle, PChar(NomeExibicao), Length(NomeExibicao), Rect,
+    DT_LEFT or DT_VCENTER or DT_SINGLELINE or DT_NOPREFIX);
+
+  if odFocused in State then
+    ListBox.Canvas.DrawFocusRect(Rect);
+end;
+
+procedure TForm1.ListBoxMusicasMouseMove(Sender: TObject; Shift: TShiftState;
+  X, Y: Integer);
+var
+  ListBox: TListBox;
+  Idx: Integer;
+begin
+  ListBox := TListBox(Sender);
+  Idx := ListBox.ItemAtPos(Point(X, Y), True);
+  if (Idx >= 0) and (Idx < ListBox.Items.Count) then
+  begin
+    if ListBox.Hint <> ListBox.Items[Idx] then
+    begin
+      ListBox.Hint := ListBox.Items[Idx];
+      Application.CancelHint;
+    end;
+  end
+  else
+    ListBox.Hint := '';
 end;
 
 function TForm1.ObterDuracaoMP3_MS(const CaminhoArquivo: string): Int64;

@@ -95,10 +95,15 @@ object Form1: TForm1
     Top = 90
     Width = 310
     Height = 230
-    ItemHeight = 15
+    ItemHeight = 18
     MultiSelect = True
+    ParentShowHint = False
+    ShowHint = True
+    Style = lbOwnerDrawFixed
     TabOrder = 2
     OnDblClick = lbDisponiveisDblClick
+    OnDrawItem = ListBoxMusicasDrawItem
+    OnMouseMove = ListBoxMusicasMouseMove
   end
   object btnPlay: TButton
     Left = 20
@@ -168,10 +173,15 @@ object Form1: TForm1
     Top = 90
     Width = 300
     Height = 270
-    ItemHeight = 15
+    ItemHeight = 18
     MultiSelect = True
+    ParentShowHint = False
+    ShowHint = True
+    Style = lbOwnerDrawFixed
     TabOrder = 10
     OnDblClick = lbPlaylistDblClick
+    OnDrawItem = ListBoxMusicasDrawItem
+    OnMouseMove = ListBoxMusicasMouseMove
   end
   object btnSalvarPlaylist: TButton
     Left = 20
@@ -220,9 +230,14 @@ object Form1: TForm1
     Top = 70
     Width = 275
     Height = 290
-    ItemHeight = 15
+    ItemHeight = 18
     MultiSelect = True
+    ParentShowHint = False
+    ShowHint = True
+    Style = lbOwnerDrawFixed
     TabOrder = 15
+    OnDrawItem = ListBoxMusicasDrawItem
+    OnMouseMove = ListBoxMusicasMouseMove
   end
   object btnSubirLst: TButton
     Left = 992
