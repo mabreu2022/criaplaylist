@@ -2,7 +2,7 @@ object Form1: TForm1
   Left = 0
   Top = 0
   Caption = 'Gerador de Playlists e Rota'#231#245'es - ZaraRadio'
-  ClientHeight = 585
+  ClientHeight = 762
   ClientWidth = 1420
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
@@ -95,11 +95,11 @@ object Form1: TForm1
     Top = 90
     Width = 310
     Height = 230
+    Style = lbOwnerDrawFixed
     ItemHeight = 18
     MultiSelect = True
     ParentShowHint = False
     ShowHint = True
-    Style = lbOwnerDrawFixed
     TabOrder = 2
     OnDblClick = lbDisponiveisDblClick
     OnDrawItem = ListBoxMusicasDrawItem
@@ -173,11 +173,11 @@ object Form1: TForm1
     Top = 90
     Width = 300
     Height = 270
+    Style = lbOwnerDrawFixed
     ItemHeight = 18
     MultiSelect = True
     ParentShowHint = False
     ShowHint = True
-    Style = lbOwnerDrawFixed
     TabOrder = 10
     OnDblClick = lbPlaylistDblClick
     OnDrawItem = ListBoxMusicasDrawItem
@@ -230,11 +230,11 @@ object Form1: TForm1
     Top = 70
     Width = 275
     Height = 290
+    Style = lbOwnerDrawFixed
     ItemHeight = 18
     MultiSelect = True
     ParentShowHint = False
     ShowHint = True
-    Style = lbOwnerDrawFixed
     TabOrder = 15
     OnDrawItem = ListBoxMusicasDrawItem
     OnMouseMove = ListBoxMusicasMouseMove
